@@ -48,7 +48,6 @@ export async function scrapeJobs(url: string): Promise<{
     });
 
     // First, crawl the main page to find career/jobs links
-    console.log("Crawling main page for career links...");
     const crawlResult = await app.scrapeUrl(url, {
       formats: ["json"],
       jsonOptions: {
@@ -56,8 +55,6 @@ export async function scrapeJobs(url: string): Promise<{
         prompt: `Find all links that might lead to job listings or career pages. Focus on links containing words like "careers", "jobs", "work with us", "join our team", especially in the footer or main navigation.`,
       },
     });
-
-    console.log("Crawl result:", JSON.stringify(crawlResult, null, 2));
 
     if (!crawlResult.success || !crawlResult.json?.links?.length) {
       throw new Error("No career links found");
@@ -84,8 +81,6 @@ export async function scrapeJobs(url: string): Promise<{
     } else {
       jobPageUrl = `${url.replace(/\/$/, "")}/${careerLink.url}`;
     }
-
-    console.log("Found career page:", jobPageUrl);
 
     // Now scrape the jobs page with a schema that includes the "View all jobs" button
     const jobsResult = await app.scrapeUrl(jobPageUrl, {
@@ -119,7 +114,6 @@ export async function scrapeJobs(url: string): Promise<{
     if (jobsResult.json?.viewAllJobsLink) {
       const viewAllUrl = new URL(jobsResult.json.viewAllJobsLink, jobPageUrl)
         .href;
-      console.log("Found 'View all jobs' link, scraping:", viewAllUrl);
 
       const allJobsResult = await app.scrapeUrl(viewAllUrl, {
         formats: ["json"],
@@ -160,12 +154,14 @@ export async function scrapeJobs(url: string): Promise<{
               title: job.title,
               description: [
                 job.description,
-                job.location && `📍 ${job.location}`,
-                job.link && `🔗 ${job.link}`,
-                `\n\nShowing ${Math.min(5, category.jobs.length)} of ${category.jobs.length} jobs in ${category.category}`
+                `\n\nShowing ${Math.min(5, category.jobs.length)} of ${
+                  category.jobs.length
+                } jobs in ${category.category}`,
               ]
                 .filter(Boolean)
                 .join("\n"),
+              location: job.location,
+              link: job.link,
             })),
           })
         );
@@ -188,42 +184,42 @@ export async function scrapeJobs(url: string): Promise<{
           jobs: category.jobs.map((job, jobIndex) => ({
             id: (categoryIndex + 1) * 1000 + jobIndex,
             title: job.title,
-            description: [
-              job.description,
-              job.location && `📍 ${job.location}`,
-              job.link && `🔗 ${job.link}`,
-            ]
-              .filter(Boolean)
-              .join("\n"),
+            description: job.description || "",
+            location: job.location,
+            link: job.link,
           })),
         })) || [],
     };
   } catch (error) {
     console.error("Error scraping jobs:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
     // Handle specific error types
     if (errorMessage.includes("408") || errorMessage.includes("timed out")) {
       return {
         success: false,
-        error: "This site is taking too long to respond. Please try again later.",
-        statusCode: 408
+        error:
+          "This site is taking too long to respond. Please try again later.",
+        statusCode: 408,
       };
     }
 
     if (errorMessage.includes("404")) {
       return {
         success: false,
-        error: "We couldn't find that page. Double-check the URL and try again!",
-        statusCode: 404
+        error:
+          "We couldn't find that page. Double-check the URL and try again!",
+        statusCode: 404,
       };
     }
 
     if (errorMessage.includes("403")) {
       return {
         success: false,
-        error: "This site isn't letting us access their jobs right now. Try again later.",
-        statusCode: 403
+        error:
+          "This site isn't letting us access their jobs right now. Try again later.",
+        statusCode: 403,
       };
     }
 
@@ -231,7 +227,7 @@ export async function scrapeJobs(url: string): Promise<{
       return {
         success: false,
         error: "Please enter a valid website URL (e.g., company.com)",
-        statusCode: 400
+        statusCode: 400,
       };
     }
 
@@ -239,7 +235,7 @@ export async function scrapeJobs(url: string): Promise<{
     return {
       success: false,
       error: "Something went wrong. Please try again later.",
-      statusCode: 500
+      statusCode: 500,
     };
   }
 }

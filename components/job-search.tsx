@@ -198,13 +198,6 @@ export default function JobSearch() {
                   {category.jobs?.map((job) => {
                     const lines = job.description.split("\n");
                     const mainDescription = lines[0];
-                    const location = lines
-                      .find((line) => line.startsWith(""))
-                      ?.replace("", "");
-                    const link = lines
-                      .find((line) => line.startsWith(""))
-                      ?.replace("", "");
-
                     const descriptionWithoutTotal = mainDescription?.split(
                       "\n\nShowing"
                     )[0];
@@ -219,25 +212,25 @@ export default function JobSearch() {
                             {job.title}
                           </h3>
 
-                          <div className="flex flex-wrap gap-3 text-sm text-gray-400 mb-2">
-                            {location && (
+                          {job.location && (
+                            <div className="flex flex-wrap gap-3 text-sm text-gray-400 mb-2">
                               <div className="flex items-center gap-1">
                                 <MapPin className="w-4 h-4 text-[#ff6b6b]" />
-                                <span>{location}</span>
+                                <span>{job.location}</span>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
                           <p className="text-gray-300 mb-4">
                             {descriptionWithoutTotal}
                           </p>
 
-                          {link && (
+                          {job.link && (
                             <a
-                              href={link}
+                              href={job.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 text-sm font-medium text-[#ff6b6b] hover:text-[#ff8585] transition-colors"
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold bg-[#ff6b6b] hover:bg-[#ff8585] text-black rounded-md transition-colors"
                             >
                               Apply Now
                               <ExternalLink className="w-4 h-4" />
