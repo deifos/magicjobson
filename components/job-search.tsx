@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, MapPin, ExternalLink, Briefcase } from "lucide-react";
+import { Search, MapPin, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { JobCategory } from "@/types/jobs";
 import { scrapeJobs } from "@/lib/actions";
 import { toast } from "sonner";
-import confetti from 'canvas-confetti';
+import confetti, { Options } from "canvas-confetti";
 
 const funnyLoadingMessages = [
   " Dribbling through job postings...",
@@ -36,7 +36,9 @@ export default function JobSearch() {
     if (isLoading) {
       const interval = setInterval(() => {
         setLoadingMessage(
-          funnyLoadingMessages[Math.floor(Math.random() * funnyLoadingMessages.length)]
+          funnyLoadingMessages[
+            Math.floor(Math.random() * funnyLoadingMessages.length)
+          ]
         );
       }, 2000);
       return () => clearInterval(interval);
@@ -47,14 +49,14 @@ export default function JobSearch() {
     const count = 200;
     const defaults = {
       origin: { y: 0.7 },
-      colors: ['#ff6b6b', '#ff8585', '#1a1a1a']
+      colors: ["#ff6b6b", "#ff8585", "#1a1a1a"],
     };
 
-    function fire(particleRatio: number, opts: any) {
+    function fire(particleRatio: number, opts: Partial<Options>) {
       confetti({
         ...defaults,
         ...opts,
-        particleCount: Math.floor(count * particleRatio)
+        particleCount: Math.floor(count * particleRatio),
       });
     }
 
@@ -70,14 +72,14 @@ export default function JobSearch() {
     fire(0.35, {
       spread: 100,
       decay: 0.91,
-      scalar: 0.8
+      scalar: 0.8,
     });
 
     fire(0.1, {
       spread: 120,
       startVelocity: 25,
       decay: 0.92,
-      scalar: 1.2
+      scalar: 1.2,
     });
 
     fire(0.1, {
@@ -97,12 +99,12 @@ export default function JobSearch() {
     setLoadingMessage(funnyLoadingMessages[0]);
     setJobCategories([]);
     setIsShaking(false);
-    
+
     try {
       toast.loading("", {
         description: "Our all-star team is scouting for the best positions!",
       });
-      
+
       const result = await scrapeJobs(url);
       console.log("Search result:", result);
 
@@ -117,7 +119,8 @@ export default function JobSearch() {
         setIsShaking(true);
         setTimeout(() => setIsShaking(false), 820); // Animation duration + small buffer
         toast.error("Oops!", {
-          description: result.error || "Something went wrong. Please try again.",
+          description:
+            result.error || "Something went wrong. Please try again.",
         });
       }
     } catch (error) {
@@ -135,7 +138,11 @@ export default function JobSearch() {
 
   return (
     <div className="max-w-4xl mx-auto font-mono">
-      <div className={`bg-[#2a2a2a] rounded-lg shadow-neon border-2 border-[#ff6b6b] p-6 mb-8 transition-all ${isShaking ? 'animate-shake' : ''}`}>
+      <div
+        className={`bg-[#2a2a2a] rounded-lg shadow-neon border-2 border-[#ff6b6b] p-6 mb-8 transition-all ${
+          isShaking ? "animate-shake" : ""
+        }`}
+      >
         <div className="flex gap-2">
           <Input
             placeholder="Drop the URL and let's score some jobs! "
@@ -144,9 +151,9 @@ export default function JobSearch() {
             className="flex-1 bg-[#1a1a1a] text-[#ff6b6b] border-[#ff6b6b] placeholder:text-[#ff6b6b]/50"
             disabled={isLoading}
           />
-          <Button 
-            onClick={handleSearch} 
-            disabled={isLoading} 
+          <Button
+            onClick={handleSearch}
+            disabled={isLoading}
             size="lg"
             className="bg-[#ff6b6b] hover:bg-[#ff8585] text-black font-bold"
           >
@@ -188,7 +195,7 @@ export default function JobSearch() {
                       <Badge className="bg-[#ff6b6b] text-black font-mono">
                         {category.jobs[0].description
                           .split("\n")
-                          .find(line => line.includes("Showing"))
+                          .find((line) => line.includes("Showing"))
                           ?.trim()}
                       </Badge>
                     )}
@@ -198,9 +205,8 @@ export default function JobSearch() {
                   {category.jobs?.map((job) => {
                     const lines = job.description.split("\n");
                     const mainDescription = lines[0];
-                    const descriptionWithoutTotal = mainDescription?.split(
-                      "\n\nShowing"
-                    )[0];
+                    const descriptionWithoutTotal =
+                      mainDescription?.split("\n\nShowing")[0];
 
                     return (
                       <div
@@ -244,15 +250,15 @@ export default function JobSearch() {
               </CardContent>
             </Card>
           ))
-        ) : (
+        ) : !isLoading && error === null ? (
           <div className="text-center py-12 bg-[#2a2a2a] rounded-lg border-2 border-[#ff6b6b]">
             <div className="text-[#ff6b6b]">
-              {isLoading
-                ? loadingMessage
+              {url
+                ? " No jobs found on this site. Try another URL!"
                 : " The court is ready! Drop a URL above to start the job search game!"}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

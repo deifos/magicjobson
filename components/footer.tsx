@@ -10,7 +10,7 @@ export default function Footer() {
             rel="noopener noreferrer"
             className="text-[#ff6b6b] hover:text-[#ff8585] transition-colors"
           >
-            firecrawl🔥
+            Firecrawl🔥
           </a>
         </p>
       </div>

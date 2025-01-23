@@ -1,29 +1,10 @@
 "use server";
 
-import { JobCategory, Job } from "@/types/jobs";
+import { JobCategory } from "@/types/jobs";
 import FirecrawlApp from "@mendable/firecrawl-js";
 import { z } from "zod";
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-
-// Define the schema for job data extraction
-const jobSchema = z.object({
-  categories: z.array(
-    z.object({
-      category: z.string(),
-      tags: z.array(z.string()),
-      jobs: z.array(
-        z.object({
-          title: z.string(),
-          description: z.string(),
-          location: z.string().optional(),
-          salary: z.string().optional(),
-          link: z.string().optional(),
-        })
-      ),
-    })
-  ),
-});
 
 // Schema to find career/jobs pages
 const careerLinksSchema = z.object({
@@ -98,6 +79,7 @@ export async function scrapeJobs(url: string): Promise<{
                   link: z.string().optional(),
                 })
               ),
+              totalJobs: z.number().optional(),
             })
           ),
           viewAllJobsLink: z.string().optional(),
@@ -134,11 +116,12 @@ export async function scrapeJobs(url: string): Promise<{
               })
             ),
           }),
-          prompt: `Extract job listings from this page, limiting to the first 5 jobs per category to avoid timeouts. For each job:
+          prompt: `Extract job listings from this page. For each job:
                   - Get the title, description (if available), location (if available), and application link (if available)
                   - Group jobs by their categories
-                  - For each category, also note the total number of jobs available in the 'totalJobs' field
-                  Note: Only extract the first 5 most relevant jobs per category, even if more are available.`,
+                  - For each category, count and record the TOTAL number of jobs available in the 'totalJobs' field, even if we're only extracting a subset
+                  - Look for any text or elements that indicate the total number of jobs (e.g. "204 jobs", "Showing 1-10 of 50")
+                  Note: Only extract the first 5 most relevant jobs per category to avoid timeouts, but make sure to capture the total count.`,
         },
       });
 
@@ -149,17 +132,11 @@ export async function scrapeJobs(url: string): Promise<{
             id: categoryIndex + 1,
             title: category.category,
             tags: [], // Initialize with empty tags array
+            totalJobs: category.totalJobs || category.jobs.length,
             jobs: category.jobs.slice(0, 5).map((job, jobIndex) => ({
               id: (categoryIndex + 1) * 1000 + jobIndex,
               title: job.title,
-              description: [
-                job.description,
-                `\n\nShowing ${Math.min(5, category.jobs.length)} of ${
-                  category.jobs.length
-                } jobs in ${category.category}`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
+              description: job.description || "",
               location: job.location,
               link: job.link,
             })),
@@ -181,6 +158,7 @@ export async function scrapeJobs(url: string): Promise<{
           id: categoryIndex + 1,
           title: category.category,
           tags: [],
+          totalJobs: category.totalJobs || category.jobs.length,
           jobs: category.jobs.map((job, jobIndex) => ({
             id: (categoryIndex + 1) * 1000 + jobIndex,
             title: job.title,
