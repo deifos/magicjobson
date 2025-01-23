@@ -7,20 +7,6 @@ export const metadata: Metadata = {
   title: "MagicJobson - Slam Dunk Your Job Search",
   description:
     "A slam-dunk approach to job hunting! Find job opportunities across company websites with our basketball-themed job search tool. Filter by position, see organized categories, and apply with style.",
-  keywords: [
-    "job search",
-    "career finder",
-    "job opportunities",
-    "job scraping",
-    "position filter",
-    "company jobs",
-    "job categories",
-    "career opportunities",
-    "job hunting",
-    "job board",
-  ],
-  publisher: "MagicJobson",
-  themeColor: "#ff6b6b",
 };
 
 export default function RootLayout({
