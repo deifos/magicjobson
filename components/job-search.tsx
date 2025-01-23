@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { JobCategory } from "@/types/jobs";
 import { scrapeJobs } from "@/lib/actions";
 import { toast } from "sonner";
+import confetti from 'canvas-confetti';
 
 const funnyLoadingMessages = [
   " Dribbling through job postings...",
@@ -28,6 +29,8 @@ export default function JobSearch() {
   const [isLoading, setIsLoading] = useState(false);
   const [jobCategories, setJobCategories] = useState<JobCategory[]>([]);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isShaking, setIsShaking] = useState(false);
 
   useEffect(() => {
     if (isLoading) {
@@ -40,6 +43,49 @@ export default function JobSearch() {
     }
   }, [isLoading]);
 
+  const triggerConfetti = () => {
+    const count = 200;
+    const defaults = {
+      origin: { y: 0.7 },
+      colors: ['#ff6b6b', '#ff8585', '#1a1a1a']
+    };
+
+    function fire(particleRatio: number, opts: any) {
+      confetti({
+        ...defaults,
+        ...opts,
+        particleCount: Math.floor(count * particleRatio)
+      });
+    }
+
+    fire(0.25, {
+      spread: 26,
+      startVelocity: 55,
+    });
+
+    fire(0.2, {
+      spread: 60,
+    });
+
+    fire(0.35, {
+      spread: 100,
+      decay: 0.91,
+      scalar: 0.8
+    });
+
+    fire(0.1, {
+      spread: 120,
+      startVelocity: 25,
+      decay: 0.92,
+      scalar: 1.2
+    });
+
+    fire(0.1, {
+      spread: 120,
+      startVelocity: 45,
+    });
+  };
+
   const handleSearch = async () => {
     if (!url) {
       toast.error(" Whoops! You forgot to pass the ball (URL)!");
@@ -47,7 +93,10 @@ export default function JobSearch() {
     }
 
     setIsLoading(true);
+    setError(null);
     setLoadingMessage(funnyLoadingMessages[0]);
+    setJobCategories([]);
+    setIsShaking(false);
     
     try {
       toast.loading("", {
@@ -62,18 +111,23 @@ export default function JobSearch() {
         toast.success(` Swish! Found ${result.data.length} job categories!`, {
           description: "Time to make your career move!",
         });
+        triggerConfetti();
       } else {
-        toast.error(" Air Ball!", {
-          description: result.error || "Missed the shot at finding jobs. Let's try again!",
+        setError(result.error || "Something went wrong. Please try again.");
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 820); // Animation duration + small buffer
+        toast.error("Oops!", {
+          description: result.error || "Something went wrong. Please try again.",
         });
-        setJobCategories([]);
       }
     } catch (error) {
       console.error("Search error:", error);
-      toast.error(" Foul Play!", {
-        description: "Technical difficulties in the game. Let's reset and try again!",
+      setError("Something went wrong. Please try again later.");
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 820);
+      toast.error("Error", {
+        description: "Something went wrong. Please try again later.",
       });
-      setJobCategories([]);
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +135,7 @@ export default function JobSearch() {
 
   return (
     <div className="max-w-4xl mx-auto font-mono">
-      <div className="bg-[#2a2a2a] rounded-lg shadow-neon border-2 border-[#ff6b6b] p-6 mb-8">
+      <div className={`bg-[#2a2a2a] rounded-lg shadow-neon border-2 border-[#ff6b6b] p-6 mb-8 transition-all ${isShaking ? 'animate-shake' : ''}`}>
         <div className="flex gap-2">
           <Input
             placeholder="Drop the URL and let's score some jobs! "
@@ -105,47 +159,41 @@ export default function JobSearch() {
             {loadingMessage}
           </div>
         )}
+        {error && !isLoading && (
+          <div className="mt-4 p-4 bg-[#1a1a1a] border border-[#ff6b6b] rounded-lg">
+            <div className="flex items-center gap-2 text-[#ff6b6b]">
+              <p>{error}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-8">
         {jobCategories.length > 0 ? (
           jobCategories.map((category) => (
-            <Card key={category.id} className="overflow-hidden border-2 border-[#ff6b6b] bg-[#2a2a2a] text-white">
-              <CardHeader className="bg-[#1a1a1a] border-b border-[#ff6b6b]">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <Briefcase className="w-5 h-5 text-[#ff6b6b]" />
-                        <CardTitle className="text-xl text-[#ff6b6b]">{category.title}</CardTitle>
-                        {category.jobs[0]?.description
-                          .split("\n")
-                          .find(line => line.includes("Showing 5 of")) && (
-                          <Badge className="bg-[#ff6b6b] text-black font-mono">
-                            {category.jobs[0].description
-                              .split("\n")
-                              .find(line => line.includes("Showing 5 of"))
-                              ?.replace("\n\nShowing ", "")
-                              ?.replace(" available positions in this category", "")}
-                          </Badge>
-                        )}
-                      </div>
+            <Card
+              key={category.id}
+              className="bg-[#2a2a2a] border-[#ff6b6b] shadow-neon"
+            >
+              <CardContent className="p-6">
+                <div className="mb-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-3">
+                      <Search className="w-5 h-5 text-[#ff6b6b]" />
+                      <CardTitle className="text-xl text-[#ff6b6b]">
+                        {category.title}
+                      </CardTitle>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {category.tags?.map((tag, index) => (
-                      <Badge
-                        key={`${tag}-${index}`}
-                        variant="secondary"
-                        className="bg-[#ff6b6b]/20 text-[#ff6b6b] hover:bg-[#ff6b6b]/30"
-                      >
-                        {tag}
+                    {category.jobs[0]?.description && (
+                      <Badge className="bg-[#ff6b6b] text-black font-mono">
+                        {category.jobs[0].description
+                          .split("\n")
+                          .find(line => line.includes("Showing"))
+                          ?.trim()}
                       </Badge>
-                    ))}
+                    )}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="p-6 bg-[#2a2a2a]">
                 <div className="grid gap-6">
                   {category.jobs?.map((job) => {
                     const lines = job.description.split("\n");

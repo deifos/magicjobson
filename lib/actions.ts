@@ -40,6 +40,7 @@ export async function scrapeJobs(url: string): Promise<{
   success: boolean;
   data?: JobCategory[];
   error?: string;
+  statusCode?: number;
 }> {
   try {
     const app = new FirecrawlApp({
@@ -116,7 +117,8 @@ export async function scrapeJobs(url: string): Promise<{
 
     // If there's a "View all jobs" link, scrape that page as well
     if (jobsResult.json?.viewAllJobsLink) {
-      const viewAllUrl = new URL(jobsResult.json.viewAllJobsLink, jobPageUrl).href;
+      const viewAllUrl = new URL(jobsResult.json.viewAllJobsLink, jobPageUrl)
+        .href;
       console.log("Found 'View all jobs' link, scraping:", viewAllUrl);
 
       const allJobsResult = await app.scrapeUrl(viewAllUrl, {
@@ -148,23 +150,25 @@ export async function scrapeJobs(url: string): Promise<{
 
       if (allJobsResult.success && allJobsResult.json?.categories) {
         // Map the scraped data to match JobCategory type
-        const categoriesWithCounts = allJobsResult.json.categories.map((category, categoryIndex) => ({
-          id: categoryIndex + 1,
-          title: category.category,
-          tags: [],  // Initialize with empty tags array
-          jobs: category.jobs.slice(0, 5).map((job, jobIndex) => ({
-            id: (categoryIndex + 1) * 1000 + jobIndex,
-            title: job.title,
-            description: [
-              job.description,
-              job.location && `📍 ${job.location}`,
-              job.link && `🔗 ${job.link}`,
-              category.totalJobs && category.totalJobs > 5 
-                ? `\n\nShowing 5 of ${category.totalJobs} available positions in this category`
-                : ''
-            ].filter(Boolean).join('\n'),
-          })),
-        }));
+        const categoriesWithCounts = allJobsResult.json.categories.map(
+          (category, categoryIndex) => ({
+            id: categoryIndex + 1,
+            title: category.category,
+            tags: [], // Initialize with empty tags array
+            jobs: category.jobs.slice(0, 5).map((job, jobIndex) => ({
+              id: (categoryIndex + 1) * 1000 + jobIndex,
+              title: job.title,
+              description: [
+                job.description,
+                job.location && `📍 ${job.location}`,
+                job.link && `🔗 ${job.link}`,
+                `\n\nShowing ${Math.min(5, category.jobs.length)} of ${category.jobs.length} jobs in ${category.category}`
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            })),
+          })
+        );
 
         return {
           success: true,
@@ -176,28 +180,66 @@ export async function scrapeJobs(url: string): Promise<{
     // If no "View all jobs" link or if that page failed, return the jobs from the main careers page
     return {
       success: true,
-      data: jobsResult.json?.categories?.map((category, categoryIndex) => ({
-        id: categoryIndex + 1,
-        title: category.category,
-        tags: [],
-        jobs: category.jobs.map((job, jobIndex) => ({
-          id: (categoryIndex + 1) * 1000 + jobIndex,
-          title: job.title,
-          description: [
-            job.description,
-            job.location && `📍 ${job.location}`,
-            job.link && `🔗 ${job.link}`
-          ].filter(Boolean).join('\n'),
-        })),
-      })) || [],
+      data:
+        jobsResult.json?.categories?.map((category, categoryIndex) => ({
+          id: categoryIndex + 1,
+          title: category.category,
+          tags: [],
+          jobs: category.jobs.map((job, jobIndex) => ({
+            id: (categoryIndex + 1) * 1000 + jobIndex,
+            title: job.title,
+            description: [
+              job.description,
+              job.location && `📍 ${job.location}`,
+              job.link && `🔗 ${job.link}`,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          })),
+        })) || [],
     };
   } catch (error) {
     console.error("Error scraping jobs:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
+    // Handle specific error types
+    if (errorMessage.includes("408") || errorMessage.includes("timed out")) {
+      return {
+        success: false,
+        error: "This site is taking too long to respond. Please try again later.",
+        statusCode: 408
+      };
+    }
+
+    if (errorMessage.includes("404")) {
+      return {
+        success: false,
+        error: "We couldn't find that page. Double-check the URL and try again!",
+        statusCode: 404
+      };
+    }
+
+    if (errorMessage.includes("403")) {
+      return {
+        success: false,
+        error: "This site isn't letting us access their jobs right now. Try again later.",
+        statusCode: 403
+      };
+    }
+
+    if (errorMessage.includes("400")) {
+      return {
+        success: false,
+        error: "Please enter a valid website URL (e.g., company.com)",
+        statusCode: 400
+      };
+    }
+
+    // Generic error message for other cases
     return {
       success: false,
-      error: `Error: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`,
+      error: "Something went wrong. Please try again later.",
+      statusCode: 500
     };
   }
 }
