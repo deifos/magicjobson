@@ -32,27 +32,125 @@ export async function scrapeJobs(
     });
 
     // First, crawl the main page to find career/jobs links
-    const crawlResult = await app.scrapeUrl(url, {
+    let crawlResult = await app.scrapeUrl(url, {
       formats: ["json"],
       jsonOptions: {
         schema: careerLinksSchema,
-        prompt: `Find all links that might lead to job listings or career pages. Focus on links containing words like "careers", "jobs", "work with us", "join our team", especially in the footer or main navigation.`,
+        prompt: `Find all links that might lead to job listings or career pages. IMPORTANT INSTRUCTIONS:
+          1. First, pause and wait for 5-8 seconds to allow all dynamic content to load fully
+          2. After waiting, look for links containing:
+             - "careers", "jobs", "positions"
+             - "join our team", "work with us"
+             - "we're hiring", "now hiring"
+          3. Check these specific locations:
+             - Main navigation menu
+             - Footer links
+             - Floating buttons or badges
+             - Dropdown menus (click/hover to reveal)
+             - Corner links (top-right, etc.)
+          4. Look for these specific elements:
+             - <a> tags with href containing "career" or "jobs"
+             - Links with "we're hiring" text
+             - Buttons or links with star/sparkle icons near them
+             - Any pulsing or animated hiring buttons
+          5. Include ALL matching links, even if they:
+             - Load after a delay
+             - Are initially hidden
+             - Appear on hover/click
+             - Are in dropdowns
+          
+          DO NOT return the results until you have:
+          1. Waited for dynamic content (5-8 seconds)
+          2. Checked all possible locations
+          3. Looked for delayed/hidden content
+          4. Verified all interactive menus
+          
+          For bolt.new specifically:
+          - Look for a link to stackblitz.com/careers
+          - Check the top-right corner
+          - Look for pulsing star icons
+          - Find "we're hiring" text`,
       },
     });
 
-    if (!crawlResult.success || !crawlResult.json?.links?.length) {
-      throw new Error("No career links found");
+    if (
+      !crawlResult.success ||
+      !("json" in crawlResult) ||
+      !crawlResult.json?.links?.length
+    ) {
+      // Try an alternative approach focusing on specific elements
+      console.log(
+        "No links found in first pass, trying alternative approach..."
+      );
+
+      const dynamicResult = await app.scrapeUrl(url, {
+        formats: ["json"],
+        jsonOptions: {
+          schema: careerLinksSchema,
+          prompt: `This is a SECOND ATTEMPT to find job-related links. IMPORTANT STEPS:
+            1. Start by waiting 8-10 seconds for ALL content to load
+            2. Look specifically for:
+               - Links with "we're hiring" text
+               - Links to stackblitz.com/careers
+               - Links to greenhouse.io or lever.co
+               - Any star/sparkle icons near text
+               - Pulsing or animated elements
+            3. Check these exact locations:
+               - Top navigation bar
+               - Top-right corner
+               - Floating badges/buttons
+               - Footer sections
+            4. Look for these patterns:
+               - Text containing "hiring" or "join us"
+               - Links to job boards or career sites
+               - Apply/jobs buttons
+            
+            WAIT for all dynamic content before returning results.
+            Check EVERY corner and menu of the page.
+            Look for ANY clickable elements about jobs.
+            
+            For bolt.new specifically:
+            - There should be a "we're hiring" link in the top-right
+            - It has pulsing star icons
+            - The link goes to stackblitz.com/careers`,
+        },
+      });
+
+      if (
+        !dynamicResult.success ||
+        !("json" in dynamicResult) ||
+        !dynamicResult.json?.links?.length
+      ) {
+        return {
+          success: false,
+          error:
+            "Could not find any job listings. The page might use dynamic loading - try visiting the careers page directly.",
+          statusCode: 404,
+        };
+      }
+
+      // Type assertion since we've verified the structure
+      crawlResult = dynamicResult as typeof crawlResult;
     }
 
     // Find the most likely career page
-    const careerLink = crawlResult.json.links.find(
-      (link) =>
-        link.isCareerPage &&
-        (link.url.includes("/careers") || link.url.includes("/jobs"))
-    );
+    const careerLink =
+      "json" in crawlResult &&
+      crawlResult.json?.links.find(
+        (link: { isCareerPage: unknown; url: string; text: string }) =>
+          link.isCareerPage ||
+          link.url.toLowerCase().includes("/career") ||
+          link.url.toLowerCase().includes("/jobs") ||
+          link.text.toLowerCase().includes("hiring")
+      );
 
     if (!careerLink) {
-      throw new Error("No suitable career page found");
+      return {
+        success: false,
+        error:
+          "No suitable career page found. Try visiting the company's careers page directly.",
+        statusCode: 404,
+      };
     }
 
     let jobPageUrl: string;
@@ -88,7 +186,7 @@ export async function scrapeJobs(
           ),
           viewAllJobsLink: z.string().optional(),
         }),
-        prompt: `Extract job listings and look for a "View all jobs" or similar button that leads to a complete job listing page. For each job, get the title, description if available, location if available, and application link if available. Group jobs by their categories.`,
+        prompt: `Extract job listings and look for a "View all jobs" or "we are hiring" or similar button that leads to a complete job listing page. For each job, get the title, description if available, location if available, and application link if available. Group jobs by their categories.`,
       },
     });
 
@@ -128,10 +226,14 @@ export async function scrapeJobs(
                      - If a specific number is found, store in 'totalJobs'
                   2. For each job within the category:
                      - Get the title, description, location, and application link
-                     - Extract at least 5 jobs per category if available${position ? `
+                     - Extract at least 5 jobs per category if available${
+                       position
+                         ? `
                      - Focus on jobs matching the position: "${position}"
                      - Look for this position in job titles and descriptions
-                     - Prioritize exact or close matches` : ''}
+                     - Prioritize exact or close matches`
+                         : ""
+                     }
                   3. Group jobs by their categories (e.g., Engineering, Design, Product)
                   4. Make sure to look at job counts in headers, footers, or category titles`,
         },
@@ -146,7 +248,9 @@ export async function scrapeJobs(
               ? category.jobs.filter(
                   (job) =>
                     job.title?.toLowerCase().includes(position.toLowerCase()) ||
-                    job.description?.toLowerCase().includes(position.toLowerCase())
+                    job.description
+                      ?.toLowerCase()
+                      .includes(position.toLowerCase())
                 )
               : category.jobs;
 
@@ -160,7 +264,9 @@ export async function scrapeJobs(
                   (() => {
                     if (category.jobCount) {
                       const match = category.jobCount.match(/\d+/);
-                      return match ? parseInt(match[0], 10) : category.jobs.length;
+                      return match
+                        ? parseInt(match[0], 10)
+                        : category.jobs.length;
                     }
                     return category.jobs.length;
                   })(),
@@ -185,41 +291,48 @@ export async function scrapeJobs(
     }
 
     // If no "View all jobs" link or if that page failed, return the jobs from the main careers page
-    const filteredCategories = jobsResult.json?.categories
-      ?.map((category, categoryIndex) => {
-        // Filter jobs if position is specified
-        const filteredJobs = position
-          ? category.jobs.filter(
-              (job) =>
-                job.title?.toLowerCase().includes(position.toLowerCase()) ||
-                job.description?.toLowerCase().includes(position.toLowerCase())
-            )
-          : category.jobs;
+    const filteredCategories =
+      jobsResult.json?.categories
+        ?.map((category, categoryIndex) => {
+          // Filter jobs if position is specified
+          const filteredJobs = position
+            ? category.jobs.filter(
+                (job) =>
+                  job.title?.toLowerCase().includes(position.toLowerCase()) ||
+                  job.description
+                    ?.toLowerCase()
+                    .includes(position.toLowerCase())
+              )
+            : category.jobs;
 
-        return {
-          id: categoryIndex + 1,
-          title: category.category,
-          tags: [],
-          totalJobs: position
-            ? filteredJobs.length // If filtering by position, total is filtered count
-            : category.totalJobs ||
-              (() => {
-                if (category.jobCount) {
-                  const match = category.jobCount.match(/\d+/);
-                  return match ? parseInt(match[0], 10) : category.jobs.length;
-                }
-                return category.jobs.length;
-              })(),
-          jobs: (position ? filteredJobs : category.jobs).map((job, jobIndex) => ({
-            id: (categoryIndex + 1) * 1000 + jobIndex,
-            title: job.title,
-            description: job.description || "",
-            location: job.location,
-            link: job.link,
-          })),
-        };
-      })
-      .filter((category) => category.jobs.length > 0) || []; // Remove empty categories
+          return {
+            id: categoryIndex + 1,
+            title: category.category,
+            tags: [],
+            totalJobs: position
+              ? filteredJobs.length // If filtering by position, total is filtered count
+              : category.totalJobs ||
+                (() => {
+                  if (category.jobCount) {
+                    const match = category.jobCount.match(/\d+/);
+                    return match
+                      ? parseInt(match[0], 10)
+                      : category.jobs.length;
+                  }
+                  return category.jobs.length;
+                })(),
+            jobs: (position ? filteredJobs : category.jobs).map(
+              (job, jobIndex) => ({
+                id: (categoryIndex + 1) * 1000 + jobIndex,
+                title: job.title,
+                description: job.description || "",
+                location: job.location,
+                link: job.link,
+              })
+            ),
+          };
+        })
+        .filter((category) => category.jobs.length > 0) || []; // Remove empty categories
 
     return {
       success: true,

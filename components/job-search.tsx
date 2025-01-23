@@ -113,36 +113,46 @@ export default function JobSearch() {
     setIsShaking(false);
 
     try {
-      toast.loading("", {
+      const toastId = toast.loading("", {
         description: position
           ? `Our all-star team is scouting for ${position} positions!`
           : "Our all-star team is scouting for the best positions!",
       });
 
       const result = await scrapeJobs(url, position);
-      console.log("Search result:", result);
 
-      if (result.success && result.data) {
-        setJobCategories(result.data);
-        toast.success(` Swish! Found ${result.data.length} job categories!`, {
-          description: "Time to make your career move!",
-        });
-        triggerConfetti();
-      } else {
+      // Always dismiss the loading toast
+      toast.dismiss(toastId);
+
+      if (!result.success) {
         setError(result.error || "Something went wrong. Please try again.");
         setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 820); // Animation duration + small buffer
-        toast.error("Oops!", {
+        toast.error(" Turnover!", {
           description:
             result.error || "Something went wrong. Please try again.",
         });
+        return;
       }
+
+      if (!result.data?.length) {
+        setError("No jobs found matching your criteria.");
+        setIsShaking(true);
+        toast.error(" No shots made!", {
+          description: "Try adjusting your search criteria.",
+        });
+        return;
+      }
+
+      setJobCategories(result.data);
+      triggerConfetti();
+      toast.success(" Slam dunk!", {
+        description: `Found some job for ya! Time to make your career move!`,
+      });
     } catch (error) {
       console.error("Search error:", error);
       setError("Something went wrong. Please try again later.");
       setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 820);
-      toast.error("Error", {
+      toast.error(" Technical foul!", {
         description: "Something went wrong. Please try again later.",
       });
     } finally {
@@ -178,8 +188,8 @@ export default function JobSearch() {
           </div>
           <div className="space-y-2">
             <p className="text-[#ff6b6b] text-sm italic">
-              🏀 It&apos;s easier to score when you know what you&apos;re
-              shooting for! Drop your dream position below.
+              It&apos;s easier to score when you know what you&apos;re shooting
+              for! Drop your dream position below.
             </p>
             <Input
               placeholder="Enter desired position (optional) "
