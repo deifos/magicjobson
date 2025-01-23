@@ -1,10 +1,12 @@
 import JobSearch from "@/components/job-search";
 import Footer from "@/components/footer";
+import { GitHubCorner } from "@/components/github-corner";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#1a1a1a] font-mono flex flex-col">
-      <main className="flex-grow">
+    <div className="h-screen bg-[#1a1a1a] font-mono flex flex-col relative">
+      <GitHubCorner />
+      <main className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="container mx-auto px-4 py-12">
           <div className="text-center mb-12">
             <div className="inline-block">
