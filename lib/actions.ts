@@ -147,13 +147,23 @@ export async function scrapeJobs(url: string): Promise<{
       });
 
       if (allJobsResult.success && allJobsResult.json?.categories) {
-        // Add a note about additional jobs if any category has more than shown
-        const categoriesWithCounts = allJobsResult.json.categories.map(category => ({
-          ...category,
-          jobs: category.jobs.slice(0, 5),
-          description: category.totalJobs && category.totalJobs > 5 
-            ? `Showing 5 of ${category.totalJobs} available positions`
-            : undefined
+        // Map the scraped data to match JobCategory type
+        const categoriesWithCounts = allJobsResult.json.categories.map((category, categoryIndex) => ({
+          id: categoryIndex + 1,
+          title: category.category,
+          tags: [],  // Initialize with empty tags array
+          jobs: category.jobs.slice(0, 5).map((job, jobIndex) => ({
+            id: (categoryIndex + 1) * 1000 + jobIndex,
+            title: job.title,
+            description: [
+              job.description,
+              job.location && `📍 ${job.location}`,
+              job.link && `🔗 ${job.link}`,
+              category.totalJobs && category.totalJobs > 5 
+                ? `\n\nShowing 5 of ${category.totalJobs} available positions in this category`
+                : ''
+            ].filter(Boolean).join('\n'),
+          })),
         }));
 
         return {
@@ -166,7 +176,20 @@ export async function scrapeJobs(url: string): Promise<{
     // If no "View all jobs" link or if that page failed, return the jobs from the main careers page
     return {
       success: true,
-      data: jobsResult.json?.categories || [],
+      data: jobsResult.json?.categories?.map((category, categoryIndex) => ({
+        id: categoryIndex + 1,
+        title: category.category,
+        tags: [],
+        jobs: category.jobs.map((job, jobIndex) => ({
+          id: (categoryIndex + 1) * 1000 + jobIndex,
+          title: job.title,
+          description: [
+            job.description,
+            job.location && `📍 ${job.location}`,
+            job.link && `🔗 ${job.link}`
+          ].filter(Boolean).join('\n'),
+        })),
+      })) || [],
     };
   } catch (error) {
     console.error("Error scraping jobs:", error);

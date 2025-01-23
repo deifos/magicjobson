@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Search, MapPin, DollarSign, ExternalLink } from "lucide-react";
+import { Search, MapPin, DollarSign, ExternalLink, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { JobCategory } from "@/types/jobs";
 import { scrapeJobs } from "@/lib/actions";
@@ -15,7 +13,6 @@ import { toast } from "sonner";
 export default function JobSearch() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [jobCategories, setJobCategories] = useState<JobCategory[]>([]);
 
   const handleSearch = async () => {
@@ -45,14 +42,6 @@ export default function JobSearch() {
     }
   };
 
-  const toggleCategory = (categoryId: number) => {
-    setSelectedCategories((prev) =>
-      prev.includes(categoryId)
-        ? prev.filter((id) => id !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-lg shadow-sm border p-4 mb-8">
@@ -76,25 +65,21 @@ export default function JobSearch() {
           jobCategories.map((category) => (
             <Card key={category.id} className="overflow-hidden">
               <CardHeader className="bg-gray-50 border-b">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id={`category-${category.id}`}
-                    checked={selectedCategories.includes(category.id)}
-                    onCheckedChange={() => toggleCategory(category.id)}
-                  />
-                  <div className="flex-1">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-gray-500" />
                     <CardTitle className="text-xl">{category.title}</CardTitle>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {category.tags?.map((tag, index) => (
-                        <Badge
-                          key={`${tag}-${index}`}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {category.tags?.map((tag, index) => (
+                      <Badge
+                        key={`${tag}-${index}`}
+                        variant="secondary"
+                        className="text-xs bg-purple-100 text-purple-800 hover:bg-purple-200"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
               </CardHeader>
