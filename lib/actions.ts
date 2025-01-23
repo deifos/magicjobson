@@ -41,13 +41,6 @@ export async function scrapeJobs(url: string): Promise<{
   data?: JobCategory[];
   error?: string;
 }> {
-  if (!FIRECRAWL_API_KEY) {
-    return {
-      success: false,
-      error: "Firecrawl API key is not configured",
-    };
-  }
-
   try {
     const app = new FirecrawlApp({
       apiKey: FIRECRAWL_API_KEY,
@@ -59,109 +52,129 @@ export async function scrapeJobs(url: string): Promise<{
       formats: ["json"],
       jsonOptions: {
         schema: careerLinksSchema,
-        prompt: `Find all links that might lead to job listings or career pages. Look for:
-                - Links containing words like "careers", "jobs", "work with us", "join our team"
-                - Links in the footer or main navigation
-                - Links that might lead to job opportunities
-                
-                For each link found, determine if it's likely a career page based on the link text and URL.
-                Return all potential career-related links, sorted by likelihood of being a career page.`,
+        prompt: `Find all links that might lead to job listings or career pages. Focus on links containing words like "careers", "jobs", "work with us", "join our team", especially in the footer or main navigation.`,
       },
     });
-
-    if (!crawlResult.success) {
-      throw new Error(`Failed to crawl main page: ${crawlResult.error}`);
-    }
 
     console.log("Crawl result:", JSON.stringify(crawlResult, null, 2));
 
-    // Find the most likely career page URL
-    let jobPageUrl = url; // Default to original URL
-    const links = crawlResult.json?.links || [];
-    const careerLink = links.find((link) => link.isCareerPage);
-
-    if (careerLink) {
-      console.log("Found career page:", careerLink.url);
-      // Make sure the URL is absolute
-      jobPageUrl = new URL(careerLink.url, url).href;
+    if (!crawlResult.success || !crawlResult.json?.links?.length) {
+      throw new Error("No career links found");
     }
 
-    // Now scrape the jobs page
-    console.log("Scraping jobs from:", jobPageUrl);
-    const scrapeResult = await app.scrapeUrl(jobPageUrl, {
+    // Find the most likely career page
+    const careerLink = crawlResult.json.links.find(
+      (link) =>
+        link.isCareerPage &&
+        (link.url.includes("/careers") || link.url.includes("/jobs"))
+    );
+
+    if (!careerLink) {
+      throw new Error("No suitable career page found");
+    }
+
+    let jobPageUrl: string;
+    if (careerLink.url.startsWith("http")) {
+      jobPageUrl = careerLink.url;
+    } else if (careerLink.url.startsWith("/")) {
+      // Handle relative URLs
+      const baseUrl = new URL(url);
+      jobPageUrl = `${baseUrl.protocol}//${baseUrl.host}${careerLink.url}`;
+    } else {
+      jobPageUrl = `${url.replace(/\/$/, "")}/${careerLink.url}`;
+    }
+
+    console.log("Found career page:", jobPageUrl);
+
+    // Now scrape the jobs page with a schema that includes the "View all jobs" button
+    const jobsResult = await app.scrapeUrl(jobPageUrl, {
       formats: ["json"],
       jsonOptions: {
-        schema: jobSchema,
-        prompt: `Extract all job listings from this page. Group them by department or category (like Engineering, Design, Marketing, etc).
-                For each job:
-                - Extract the exact job title
-                - Get a detailed description
-                - If available, include the location, salary, and direct link to apply
-                - Add relevant tags for each category based on the skills and requirements mentioned
-                
-                If you find job listings, make sure to categorize them properly. If a job could belong to multiple categories,
-                choose the most relevant one. Add appropriate tags to help with searchability.
-                
-                Example of good tags for Engineering:
-                - For Frontend: "react", "javascript", "ui/ux"
-                - For Backend: "python", "apis", "databases"
-                - For DevOps: "aws", "kubernetes", "ci/cd"`,
+        schema: z.object({
+          categories: z.array(
+            z.object({
+              category: z.string(),
+              jobs: z.array(
+                z.object({
+                  title: z.string(),
+                  description: z.string().optional(),
+                  location: z.string().optional(),
+                  link: z.string().optional(),
+                })
+              ),
+            })
+          ),
+          viewAllJobsLink: z.string().optional(),
+        }),
+        prompt: `Extract job listings and look for a "View all jobs" or similar button that leads to a complete job listing page. For each job, get the title, description if available, location if available, and application link if available. Group jobs by their categories.`,
       },
     });
 
-    if (!scrapeResult.success) {
-      throw new Error(`Failed to scrape jobs: ${scrapeResult.error}`);
+    if (!jobsResult.success) {
+      throw new Error(`Failed to scrape jobs page: ${jobsResult.error}`);
     }
 
-    console.log("Scrape result:", JSON.stringify(scrapeResult, null, 2));
+    // If there's a "View all jobs" link, scrape that page as well
+    if (jobsResult.json?.viewAllJobsLink) {
+      const viewAllUrl = new URL(jobsResult.json.viewAllJobsLink, jobPageUrl).href;
+      console.log("Found 'View all jobs' link, scraping:", viewAllUrl);
 
-    const extractedData = scrapeResult.json;
+      const allJobsResult = await app.scrapeUrl(viewAllUrl, {
+        formats: ["json"],
+        jsonOptions: {
+          schema: z.object({
+            categories: z.array(
+              z.object({
+                category: z.string(),
+                jobs: z.array(
+                  z.object({
+                    title: z.string(),
+                    description: z.string().optional(),
+                    location: z.string().optional(),
+                    link: z.string().optional(),
+                  })
+                ),
+                totalJobs: z.number().optional(),
+              })
+            ),
+          }),
+          prompt: `Extract job listings from this page, limiting to the first 5 jobs per category to avoid timeouts. For each job:
+                  - Get the title, description (if available), location (if available), and application link (if available)
+                  - Group jobs by their categories
+                  - For each category, also note the total number of jobs available in the 'totalJobs' field
+                  Note: Only extract the first 5 most relevant jobs per category, even if more are available.`,
+        },
+      });
 
-    if (
-      !extractedData?.categories ||
-      !Array.isArray(extractedData.categories)
-    ) {
-      console.log("No job data found:", extractedData);
-      return {
-        success: false,
-        error: `No job listings found${
-          careerLink ? " even on the careers page" : ""
-        }`,
-      };
+      if (allJobsResult.success && allJobsResult.json?.categories) {
+        // Add a note about additional jobs if any category has more than shown
+        const categoriesWithCounts = allJobsResult.json.categories.map(category => ({
+          ...category,
+          jobs: category.jobs.slice(0, 5),
+          description: category.totalJobs && category.totalJobs > 5 
+            ? `Showing 5 of ${category.totalJobs} available positions`
+            : undefined
+        }));
+
+        return {
+          success: true,
+          data: categoriesWithCounts,
+        };
+      }
     }
 
-    // Transform the scraped data into our JobCategory format
-    const categories: JobCategory[] = extractedData.categories.map(
-      (category, index) => ({
-        id: index + 1,
-        title: category.category,
-        tags: category.tags || [],
-        jobs: (category.jobs || []).map((job, jobIndex) => ({
-          id: (index + 1) * 1000 + jobIndex,
-          title: job.title,
-          description: [
-            job.description,
-            job.location && `📍 ${job.location}`,
-            job.salary && `💰 ${job.salary}`,
-            job.link && `🔗 ${job.link}`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        })),
-      })
-    );
-
-    console.log("Transformed categories:", JSON.stringify(categories, null, 2));
-
+    // If no "View all jobs" link or if that page failed, return the jobs from the main careers page
     return {
       success: true,
-      data: categories,
+      data: jobsResult.json?.categories || [],
     };
   } catch (error) {
     console.error("Error scraping jobs:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to scrape jobs",
+      error: `Error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
     };
   }
 }
