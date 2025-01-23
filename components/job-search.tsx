@@ -68,7 +68,22 @@ export default function JobSearch() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Briefcase className="w-5 h-5 text-gray-500" />
-                    <CardTitle className="text-xl">{category.title}</CardTitle>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <CardTitle className="text-xl">{category.title}</CardTitle>
+                        {category.jobs.some((job) =>
+                          job.description.includes("Showing 5 of")
+                        ) && (
+                          <Badge variant="outline" className="text-xs">
+                            {category.jobs[0].description
+                              .split("\n")
+                              .find((line) => line.includes("Showing 5 of"))
+                              ?.replace("Showing ", "")
+                              ?.replace(" available positions in this category", "")}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {category.tags?.map((tag, index) => (
@@ -92,12 +107,14 @@ export default function JobSearch() {
                     const location = lines
                       .find((line) => line.startsWith("📍"))
                       ?.replace("📍 ", "");
-                    const salary = lines
-                      .find((line) => line.startsWith("💰"))
-                      ?.replace("💰 ", "");
                     const link = lines
                       .find((line) => line.startsWith("🔗"))
                       ?.replace("🔗 ", "");
+
+                    // Remove the total jobs message from the description
+                    const descriptionWithoutTotal = mainDescription?.split(
+                      "\n\nShowing"
+                    )[0];
 
                     return (
                       <div
@@ -116,16 +133,10 @@ export default function JobSearch() {
                                 <span>{location}</span>
                               </div>
                             )}
-                            {salary && (
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="w-4 h-4" />
-                                <span>{salary}</span>
-                              </div>
-                            )}
                           </div>
 
                           <p className="text-gray-600 mb-4">
-                            {mainDescription}
+                            {descriptionWithoutTotal}
                           </p>
 
                           {link && (
