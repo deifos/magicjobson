@@ -24,8 +24,24 @@ const funnyLoadingMessages = [
   " Setting up the perfect assist...",
 ];
 
+const getLoadingMessage = (position: string) => {
+  if (!position)
+    return funnyLoadingMessages[
+      Math.floor(Math.random() * funnyLoadingMessages.length)
+    ];
+
+  return [
+    ` Scouting for ${position} positions...`,
+    ` Running plays for ${position} roles...`,
+    ` Fast break to find ${position} opportunities...`,
+    ` Setting up the perfect ${position} shot...`,
+    ` Calling plays for ${position} positions...`,
+  ][Math.floor(Math.random() * 5)];
+};
+
 export default function JobSearch() {
   const [url, setUrl] = useState("");
+  const [position, setPosition] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [jobCategories, setJobCategories] = useState<JobCategory[]>([]);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -35,15 +51,11 @@ export default function JobSearch() {
   useEffect(() => {
     if (isLoading) {
       const interval = setInterval(() => {
-        setLoadingMessage(
-          funnyLoadingMessages[
-            Math.floor(Math.random() * funnyLoadingMessages.length)
-          ]
-        );
+        setLoadingMessage(getLoadingMessage(position));
       }, 2000);
       return () => clearInterval(interval);
     }
-  }, [isLoading]);
+  }, [isLoading, position]);
 
   const triggerConfetti = () => {
     const count = 200;
@@ -96,16 +108,18 @@ export default function JobSearch() {
 
     setIsLoading(true);
     setError(null);
-    setLoadingMessage(funnyLoadingMessages[0]);
+    setLoadingMessage(getLoadingMessage(position));
     setJobCategories([]);
     setIsShaking(false);
 
     try {
       toast.loading("", {
-        description: "Our all-star team is scouting for the best positions!",
+        description: position
+          ? `Our all-star team is scouting for ${position} positions!`
+          : "Our all-star team is scouting for the best positions!",
       });
 
-      const result = await scrapeJobs(url);
+      const result = await scrapeJobs(url, position);
       console.log("Search result:", result);
 
       if (result.success && result.data) {
@@ -143,23 +157,38 @@ export default function JobSearch() {
           isShaking ? "animate-shake" : ""
         }`}
       >
-        <div className="flex gap-2">
-          <Input
-            placeholder="Drop the URL and let's score some jobs! "
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="flex-1 bg-[#1a1a1a] text-[#ff6b6b] border-[#ff6b6b] placeholder:text-[#ff6b6b]/50"
-            disabled={isLoading}
-          />
-          <Button
-            onClick={handleSearch}
-            disabled={isLoading}
-            size="lg"
-            className="bg-[#ff6b6b] hover:bg-[#ff8585] text-black font-bold"
-          >
-            <Search className="w-4 h-4 mr-2" />
-            {isLoading ? " Running..." : " Take the Shot!"}
-          </Button>
+        <div className="flex flex-col gap-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Drop the URL and let's score some jobs! "
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="flex-1 bg-[#1a1a1a] text-[#ff6b6b] border-[#ff6b6b] placeholder:text-[#ff6b6b]/50"
+              disabled={isLoading}
+            />
+            <Button
+              onClick={handleSearch}
+              disabled={isLoading}
+              size="lg"
+              className="bg-[#ff6b6b] hover:bg-[#ff8585] text-black font-bold"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              {isLoading ? " Running..." : " Take the Shot!"}
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[#ff6b6b] text-sm italic">
+              🏀 It&apos;s easier to score when you know what you&apos;re
+              shooting for! Drop your dream position below.
+            </p>
+            <Input
+              placeholder="Enter desired position (optional) "
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              className="bg-[#1a1a1a] text-[#ff6b6b] border-[#ff6b6b] placeholder:text-[#ff6b6b]/50"
+              disabled={isLoading}
+            />
+          </div>
         </div>
         {isLoading && (
           <div className="mt-4 text-center text-[#ff6b6b] animate-pulse">
@@ -191,14 +220,11 @@ export default function JobSearch() {
                         {category.title}
                       </CardTitle>
                     </div>
-                    {category.jobs[0]?.description && (
-                      <Badge className="bg-[#ff6b6b] text-black font-mono">
-                        {category.jobs[0].description
-                          .split("\n")
-                          .find((line) => line.includes("Showing"))
-                          ?.trim()}
-                      </Badge>
-                    )}
+                    <Badge className="bg-[#ff6b6b] text-black font-mono">
+                      Showing {category.jobs.length} of {category.totalJobs}{" "}
+                      jobs
+                      {position && " matching '" + position + "'"}
+                    </Badge>
                   </div>
                 </div>
                 <div className="grid gap-6">

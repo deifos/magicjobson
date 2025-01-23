@@ -17,7 +17,10 @@ const careerLinksSchema = z.object({
   ),
 });
 
-export async function scrapeJobs(url: string): Promise<{
+export async function scrapeJobs(
+  url: string,
+  position?: string
+): Promise<{
   success: boolean;
   data?: JobCategory[];
   error?: string;
@@ -80,6 +83,7 @@ export async function scrapeJobs(url: string): Promise<{
                 })
               ),
               totalJobs: z.number().optional(),
+              jobCount: z.string().optional(), // For parsing text like "204 jobs"
             })
           ),
           viewAllJobsLink: z.string().optional(),
@@ -113,35 +117,65 @@ export async function scrapeJobs(url: string): Promise<{
                   })
                 ),
                 totalJobs: z.number().optional(),
+                jobCount: z.string().optional(), // For parsing text like "204 jobs"
               })
             ),
           }),
-          prompt: `Extract job listings from this page. For each job:
-                  - Get the title, description (if available), location (if available), and application link (if available)
-                  - Group jobs by their categories
-                  - For each category, count and record the TOTAL number of jobs available in the 'totalJobs' field, even if we're only extracting a subset
-                  - Look for any text or elements that indicate the total number of jobs (e.g. "204 jobs", "Showing 1-10 of 50")
-                  Note: Only extract the first 5 most relevant jobs per category to avoid timeouts, but make sure to capture the total count.`,
+          prompt: `Extract job listings from this page. For each category:
+                  1. Look for and extract the TOTAL number of jobs available by:
+                     - Finding text patterns like "204 jobs", "50+ positions", "Showing 1-10 of 50"
+                     - Store this in 'jobCount' field as text
+                     - If a specific number is found, store in 'totalJobs'
+                  2. For each job within the category:
+                     - Get the title, description, location, and application link
+                     - Extract at least 5 jobs per category if available${position ? `
+                     - Focus on jobs matching the position: "${position}"
+                     - Look for this position in job titles and descriptions
+                     - Prioritize exact or close matches` : ''}
+                  3. Group jobs by their categories (e.g., Engineering, Design, Product)
+                  4. Make sure to look at job counts in headers, footers, or category titles`,
         },
       });
 
       if (allJobsResult.success && allJobsResult.json?.categories) {
-        // Map the scraped data to match JobCategory type
-        const categoriesWithCounts = allJobsResult.json.categories.map(
-          (category, categoryIndex) => ({
-            id: categoryIndex + 1,
-            title: category.category,
-            tags: [], // Initialize with empty tags array
-            totalJobs: category.totalJobs || category.jobs.length,
-            jobs: category.jobs.slice(0, 5).map((job, jobIndex) => ({
-              id: (categoryIndex + 1) * 1000 + jobIndex,
-              title: job.title,
-              description: job.description || "",
-              location: job.location,
-              link: job.link,
-            })),
+        // Filter and map the scraped data to match JobCategory type
+        const categoriesWithCounts = allJobsResult.json.categories
+          .map((category, categoryIndex) => {
+            // Filter jobs if position is specified
+            const filteredJobs = position
+              ? category.jobs.filter(
+                  (job) =>
+                    job.title?.toLowerCase().includes(position.toLowerCase()) ||
+                    job.description?.toLowerCase().includes(position.toLowerCase())
+                )
+              : category.jobs;
+
+            return {
+              id: categoryIndex + 1,
+              title: category.category,
+              tags: [],
+              totalJobs: position
+                ? filteredJobs.length // If filtering by position, total is filtered count
+                : category.totalJobs ||
+                  (() => {
+                    if (category.jobCount) {
+                      const match = category.jobCount.match(/\d+/);
+                      return match ? parseInt(match[0], 10) : category.jobs.length;
+                    }
+                    return category.jobs.length;
+                  })(),
+              jobs: (position ? filteredJobs : category.jobs.slice(0, 5)).map(
+                (job, jobIndex) => ({
+                  id: (categoryIndex + 1) * 1000 + jobIndex,
+                  title: job.title,
+                  description: job.description || "",
+                  location: job.location,
+                  link: job.link,
+                })
+              ),
+            };
           })
-        );
+          .filter((category) => category.jobs.length > 0); // Remove empty categories
 
         return {
           success: true,
@@ -151,22 +185,45 @@ export async function scrapeJobs(url: string): Promise<{
     }
 
     // If no "View all jobs" link or if that page failed, return the jobs from the main careers page
-    return {
-      success: true,
-      data:
-        jobsResult.json?.categories?.map((category, categoryIndex) => ({
+    const filteredCategories = jobsResult.json?.categories
+      ?.map((category, categoryIndex) => {
+        // Filter jobs if position is specified
+        const filteredJobs = position
+          ? category.jobs.filter(
+              (job) =>
+                job.title?.toLowerCase().includes(position.toLowerCase()) ||
+                job.description?.toLowerCase().includes(position.toLowerCase())
+            )
+          : category.jobs;
+
+        return {
           id: categoryIndex + 1,
           title: category.category,
           tags: [],
-          totalJobs: category.totalJobs || category.jobs.length,
-          jobs: category.jobs.map((job, jobIndex) => ({
+          totalJobs: position
+            ? filteredJobs.length // If filtering by position, total is filtered count
+            : category.totalJobs ||
+              (() => {
+                if (category.jobCount) {
+                  const match = category.jobCount.match(/\d+/);
+                  return match ? parseInt(match[0], 10) : category.jobs.length;
+                }
+                return category.jobs.length;
+              })(),
+          jobs: (position ? filteredJobs : category.jobs).map((job, jobIndex) => ({
             id: (categoryIndex + 1) * 1000 + jobIndex,
             title: job.title,
             description: job.description || "",
             location: job.location,
             link: job.link,
           })),
-        })) || [],
+        };
+      })
+      .filter((category) => category.jobs.length > 0) || []; // Remove empty categories
+
+    return {
+      success: true,
+      data: filteredCategories,
     };
   } catch (error) {
     console.error("Error scraping jobs:", error);

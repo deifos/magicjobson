@@ -10,6 +10,7 @@ export interface JobCategory {
   id: number;
   title: string;
   tags: string[];
+  totalJobs: number;
   jobs: Job[];
 }
 
@@ -18,6 +19,7 @@ export const mockJobCategories: JobCategory[] = [
     id: 1,
     title: "Engineering Roles",
     tags: ["Frontend Development", "Backend Engineering", "DevOps"],
+    totalJobs: 2,
     jobs: [
       {
         id: 1,
@@ -36,6 +38,7 @@ export const mockJobCategories: JobCategory[] = [
     id: 2,
     title: "Design Roles",
     tags: ["UI Design", "User Research", "Product Design"],
+    totalJobs: 2,
     jobs: [
       {
         id: 3,
@@ -53,6 +56,7 @@ export const mockJobCategories: JobCategory[] = [
     id: 3,
     title: "Product Roles",
     tags: ["Product Management", "Product Strategy", "Analytics"],
+    totalJobs: 2,
     jobs: [
       {
         id: 5,
